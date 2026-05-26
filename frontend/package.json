@@ -1,0 +1,33 @@
+{
+  "name": "bizquery-frontend",
+  "version": "1.0.0",
+  "description": "BizQuery React frontend — chat interface powered by CopilotKit and authenticated via Amazon Cognito",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@copilotkit/react-core": "1.8.14",
+    "@copilotkit/react-ui": "1.8.14",
+    "aws-amplify": "6.13.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
+    "jsdom": "26.1.0",
+    "typescript": "5.8.2",
+    "vite": "6.3.5",
+    "vitest": "3.2.4"
+  }
+}

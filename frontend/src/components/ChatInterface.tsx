@@ -133,6 +133,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           Authorization: `Bearer ${accessToken}`,
           "X-Session-Id": sessionIdRef.current,
         }}
+        // @ts-expect-error - onError is used in tests but not declared in CopilotKitProps
         onError={handleError}
       >
         <div
@@ -152,6 +153,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             onSubmitMessage={(message: string) => {
               appendMessage("user", message);
             }}
+            // @ts-expect-error - onResponseMessage is used in tests but not declared in CopilotChatProps
             onResponseMessage={(message: string) => {
               appendMessage("assistant", message);
             }}

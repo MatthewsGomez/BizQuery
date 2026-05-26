@@ -1,18 +1,7 @@
-/**
- * ChatInterface — CopilotKit chat wrapper
- *
- * Wraps the CopilotKit `<CopilotChat>` component and configures it to
- * communicate with the BizQuery CopilotKit Runtime. A unique `session_id`
- * is generated when the component mounts and kept in client memory for the
- * lifetime of the page — reloading the page discards the session and starts
- * a fresh one with empty memory.
- *
- * Requirements: 6.1, 6.2, 6.3, 2.5
- */
-
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useMemo } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
+import { signOut } from "aws-amplify/auth";
 import "@copilotkit/react-ui/styles.css";
 import "../bizquery.css";
 
@@ -56,14 +45,7 @@ function generateSessionId(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Renders the BizQuery chat interface.
- *
- * The `session_id` is generated once on mount via `useRef` so it survives
- * re-renders but is discarded when the page is reloaded (Requirement 2.5).
- *
- * The CopilotKit runtime URL is `/api/copilotkit`, which is proxied to the
- * CopilotKit Runtime server during development and resolved by CloudFront
- * in production.
+ * Renders the BizQuery chat interface with a responsive sidebar and a modern AI chat area.
  */
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
   accessToken,
@@ -73,9 +55,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // discarded when the component unmounts (page reload).
   const sessionIdRef = useRef<string>(generateSessionId());
 
+  // Toggle for responsive mobile sidebar
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+
   // Local message history — tracks messages displayed in the chat thread.
   // This mirrors what CopilotKit renders so we can test history growth.
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // -------------------------------------------------------------------------
+  // JWT Parsing & Cognito Logout
+  // -------------------------------------------------------------------------
+
+  const decodedToken = useMemo(() => {
+    if (!accessToken) return null;
+    try {
+      const payload = accessToken.split(".")[1];
+      const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+      return decoded;
+    } catch (err) {
+      console.error("[ChatInterface] Failed to decode Cognito JWT:", err);
+      return null;
+    }
+  }, [accessToken]);
+
+  const username = decodedToken?.username || decodedToken?.email || decodedToken?.sub || "Usuario";
+  const userGroups = decodedToken?.["cognito:groups"] || [];
+  const derivedRole = userGroups.includes("owners")
+    ? "Propietario 👑"
+    : userGroups.includes("managers")
+    ? "Administrador 💼"
+    : "Empleado 👤";
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error("[ChatInterface] Failed to sign out:", err);
+    }
+  }, []);
 
   // -------------------------------------------------------------------------
   // Message tracking helpers
@@ -119,47 +136,140 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     <div
       data-testid="chat-interface"
       data-session-id={sessionIdRef.current}
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        background: "#ffffff",
-      }}
+      className="bizquery-app-container"
     >
-      <CopilotKit
-        runtimeUrl={import.meta.env.VITE_COPILOTKIT_RUNTIME_URL ?? "/api/copilotkit"}
-        headers={{
-          Authorization: `Bearer ${accessToken}`,
-          "X-Session-Id": sessionIdRef.current,
-        }}
-        // @ts-expect-error - onError is used in tests but not declared in CopilotKitProps
-        onError={handleError}
+      {/* Mobile Sidebar Toggle */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="mobile-sidebar-toggle"
+        aria-label="Abrir panel lateral"
       >
-        <div
-          data-testid="message-history"
-          data-message-count={messages.length}
-          aria-hidden="true"
-          style={{ display: "none" }}
-        />
+        <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-          <CopilotChat
-            labels={{
-              title: "BizQuery",
-              initial: "¡Hola! Soy BizQuery. Puedo ayudarte a consultar datos de ventas, inventario y recomendaciones de descuentos. ¿En qué puedo ayudarte?",
-              placeholder: "Escribe tu consulta aquí…",
-            }}
-            onSubmitMessage={(message: string) => {
-              appendMessage("user", message);
-            }}
-            // @ts-expect-error - onResponseMessage is used in tests but not declared in CopilotChatProps
-            onResponseMessage={(message: string) => {
-              appendMessage("assistant", message);
-            }}
-          />
+      {/* Sidebar Overlay (Mobile only) */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`bizquery-sidebar ${sidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-brand">
+          <div className="brand-logo">📊</div>
+          <div>
+            <h1 className="brand-name">BizQuery</h1>
+            <p className="brand-tagline">Business Intelligence Agent</p>
+          </div>
         </div>
-      </CopilotKit>
+
+        <nav className="sidebar-nav">
+          <div className="nav-section-title">Consultas Rápidas</div>
+          <button
+            onClick={() => {
+              const inputElement = document.querySelector(".copilotKitInput textarea") as HTMLTextAreaElement;
+              if (inputElement) {
+                inputElement.value = "Consultar ventas por período";
+                inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+                inputElement.focus();
+              }
+              setSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            📈 Ventas por período
+          </button>
+          <button
+            onClick={() => {
+              const inputElement = document.querySelector(".copilotKitInput textarea") as HTMLTextAreaElement;
+              if (inputElement) {
+                inputElement.value = "Revisar stock de productos";
+                inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+                inputElement.focus();
+              }
+              setSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            📦 Inventario de productos
+          </button>
+          <button
+            onClick={() => {
+              const inputElement = document.querySelector(".copilotKitInput textarea") as HTMLTextAreaElement;
+              if (inputElement) {
+                inputElement.value = "Recomendar descuentos para productos con baja rotación";
+                inputElement.dispatchEvent(new Event("input", { bubbles: true }));
+                inputElement.focus();
+              }
+              setSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            🏷️ Recomendación de descuentos
+          </button>
+        </nav>
+
+        <div className="sidebar-info-card">
+          <h4>Nivel de Acceso</h4>
+          <p>Tus consultas de ventas, stock y descuentos se filtran de forma inteligente según tu rol de Cognito.</p>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="user-profile">
+            <div className="user-avatar">{username.slice(0, 2).toUpperCase()}</div>
+            <div className="user-details">
+              <span className="user-name" title={username}>{username}</span>
+              <span className="user-role">{derivedRole}</span>
+            </div>
+          </div>
+          <button onClick={handleSignOut} className="sign-out-btn">
+            🚪 Cerrar Sesión
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Chat Workspace */}
+      <main className="bizquery-chat-area">
+        <CopilotKit
+          runtimeUrl={import.meta.env.VITE_COPILOTKIT_RUNTIME_URL ?? "/api/copilotkit"}
+          headers={{
+            Authorization: `Bearer ${accessToken}`,
+            "X-Session-Id": sessionIdRef.current,
+          }}
+          // @ts-expect-error - onError is used in tests but not declared in CopilotKitProps
+          onError={handleError}
+        >
+          <div
+            data-testid="message-history"
+            data-message-count={messages.length}
+            aria-hidden="true"
+            style={{ display: "none" }}
+          />
+
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+            <CopilotChat
+              labels={{
+                title: "BizQuery AI",
+                initial: "¡Hola! Soy BizQuery, tu asistente inteligente de ventas e inventario. ¿Qué información deseas consultar hoy?",
+                placeholder: "Escribe tu consulta aquí…",
+              }}
+              onSubmitMessage={(message: string) => {
+                appendMessage("user", message);
+              }}
+              // @ts-expect-error - onResponseMessage is used in tests but not declared in CopilotChatProps
+              onResponseMessage={(message: string) => {
+                appendMessage("assistant", message);
+              }}
+            />
+          </div>
+        </CopilotKit>
+      </main>
     </div>
   );
 };

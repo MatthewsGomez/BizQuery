@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: bizquery-runtime
+    runtime: node
+    rootDir: copilotkit-runtime
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: AWS_REGION
+        value: us-west-2
+      - key: BEDROCK_AGENT_ID
+        sync: false
+      - key: BEDROCK_AGENT_ALIAS_ID
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: COGNITO_USER_POOL_ID
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

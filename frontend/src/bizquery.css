@@ -337,9 +337,8 @@ body {
 /* Messages Box Area */
 .copilotKitMessages,
 [class*="copilotKitMessages"] {
-  flex: 1 1 0% !important;
+  flex: 1 1 auto !important;
   overflow-y: auto !important;
-  overflow-x: hidden !important;
   padding: 2rem 3rem !important;
   background: transparent !important;
   max-width: 900px !important;
@@ -347,8 +346,7 @@ body {
   width: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 1.25rem !important;
-  min-height: 0 !important;
+  gap: 1.5rem !important;
 }
 
 /* Messages Animation */
@@ -512,21 +510,15 @@ body {
   width: 100% !important;
 }
 
-/* Textarea styling — force dark text with maximum specificity to override CopilotKit defaults */
+/* Textarea styling */
 .copilotKitInput textarea,
-[class*="copilotKitInput"] textarea,
-.bizquery-chat-area textarea,
-.bizquery-chat-area input[type="text"],
-.bizquery-chat-area input {
+[class*="copilotKitInput"] textarea {
   border: none !important;
   border-radius: 0 !important;
   padding: 0.5rem 0 !important;
   font-size: 0.95rem !important;
   background: transparent !important;
-  /* Force text to be dark/visible — override any inherited white color */
-  color: #1e293b !important;
-  -webkit-text-fill-color: #1e293b !important;
-  caret-color: #1e293b !important;
+  color: var(--color-text-main) !important;
   resize: none !important;
   outline: none !important;
   box-shadow: none !important;
@@ -536,14 +528,6 @@ body {
   line-height: 1.5 !important;
   flex: 1 !important;
   font-family: var(--font-family) !important;
-}
-
-.copilotKitInput textarea::placeholder,
-[class*="copilotKitInput"] textarea::placeholder,
-.bizquery-chat-area textarea::placeholder {
-  color: #94a3b8 !important;
-  -webkit-text-fill-color: #94a3b8 !important;
-  opacity: 1 !important;
 }
 
 /* Send Button Capsule Styling */

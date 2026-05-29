@@ -168,11 +168,14 @@ app.post(
       let fullText = "";
 
       try {
+        // Enrich the user message with authentication context
+        const enrichedMessage = `[Contexto de usuario: user_id=${userId}, user_role=${userRole}]\n\n${userMessage}`;
+
         const input: InvokeAgentCommandInput = {
           agentId: BEDROCK_AGENT_ID,
           agentAliasId: BEDROCK_AGENT_ALIAS_ID,
           sessionId,
-          inputText: userMessage,
+          inputText: enrichedMessage,
           sessionState: {
             sessionAttributes: {
               jwt_token: jwtToken,

@@ -35,16 +35,12 @@ import sys
 # (where the working directory is /var/task/lambda or similar).
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from shared.audit import log_invocation           # noqa: E402
-from shared.db import get_db_connection          # noqa: E402
-from shared.response import error_response, success_response  # noqa: E402
+from shared.audit import log_invocation
+from shared.db import get_db_connection
+from shared.response import error_response, success_response
 
-from .models import QueryInventoryInput  # noqa: E402
-from .queries import (  # noqa: E402
-    get_inventory_by_category,
-    get_low_stock_products,
-    get_product_stock,
-)
+from models import QueryInventoryInput
+from queries import get_inventory_by_category, get_low_stock_products, get_product_stock
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

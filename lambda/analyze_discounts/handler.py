@@ -37,12 +37,9 @@ from shared.audit import log_invocation                       # noqa: E402
 from shared.db import get_db_connection                       # noqa: E402
 from shared.response import error_response, success_response  # noqa: E402
 
-from .models import AnalyzeDiscountsInput, parse_analysis_period  # noqa: E402
-from .queries import (                                            # noqa: E402
-    get_active_discounts,
-    get_inventory_rotation_analysis,
-)
-from .analyzer import generate_recommendations, generate_summary  # noqa: E402
+from models import AnalyzeDiscountsInput, parse_analysis_period
+from queries import get_active_discounts, get_inventory_rotation_analysis
+from analyzer import generate_recommendations, generate_summary
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

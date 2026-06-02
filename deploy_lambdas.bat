@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 REM ============================================================
 REM BizQuery - Script de despliegue de Lambdas

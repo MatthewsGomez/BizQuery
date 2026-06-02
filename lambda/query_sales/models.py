@@ -43,6 +43,7 @@ def parse_period(period: str) -> tuple[date, date]:
 
     Supported formats
     -----------------
+    * ``"2025"``                 → Jan 1 … Dec 31 of 2025 (full year)
     * ``"2025-Q1"``              → first day … last day of Q1 2025
     * ``"2025-01"``              → first … last day of January 2025
     * ``"2025-01-01:2025-03-31"``→ explicit start:end range (inclusive)
@@ -89,9 +90,15 @@ def parse_period(period: str) -> tuple[date, date]:
         end = date(year, month, _last_day_of_month(year, month))
         return start, end
 
+    # --- Full year: "YYYY" ---
+    year_match = re.fullmatch(r"(\d{4})", period)
+    if year_match:
+        year = int(year_match.group(1))
+        return date(year, 1, 1), date(year, 12, 31)
+
     raise ValueError(
         f"Unrecognized period format: '{period}'. "
-        "Expected 'YYYY-QN', 'YYYY-MM', or 'YYYY-MM-DD:YYYY-MM-DD'."
+        "Expected 'YYYY', 'YYYY-QN', 'YYYY-MM', or 'YYYY-MM-DD:YYYY-MM-DD'."
     )
 
 
@@ -137,6 +144,12 @@ class QuerySalesInput:
             If *period* is missing or empty, or if any period string has an
             unrecognised format.
         """
+        # Ensure period is always a string (Bedrock may pass it as int)
+        if self.period is not None:
+            self.period = str(self.period)
+        if self.compare_period is not None:
+            self.compare_period = str(self.compare_period)
+
         if not self.period or not self.period.strip():
             raise ValueError("'period' is required and cannot be empty.")
 

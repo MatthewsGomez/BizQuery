@@ -196,8 +196,11 @@ app.post(
           }
         }
       } catch (error) {
-        const err = error as Error;
-        console.error("[BizQuery Runtime] Bedrock error:", err.message);
+        const err = error as Error & { name?: string; $metadata?: unknown; $fault?: string };
+        console.error("[BizQuery Runtime] Bedrock error name:", err.name);
+        console.error("[BizQuery Runtime] Bedrock error message:", err.message);
+        console.error("[BizQuery Runtime] Bedrock error metadata:", JSON.stringify(err.$metadata ?? {}));
+        console.error("[BizQuery Runtime] Bedrock error stack:", err.stack);
         fullText = "Lo siento, ocurrió un error al procesar tu consulta. Por favor intenta de nuevo.";
       }
 

@@ -37,7 +37,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from shared.audit import log_invocation
 from shared.db import get_db_connection
-from shared.response import error_response, success_response
+from shared.response import (
+    bedrock_response,
+    error_response,
+    extract_bedrock_params,
+    is_bedrock_event,
+    success_response,
+)
 
 from models import QueryInventoryInput
 from queries import get_inventory_by_category, get_low_stock_products, get_product_stock
@@ -64,13 +70,25 @@ def handler(event: dict, context: object) -> dict:
         ``success_response`` or ``error_response``.
     """
     # ------------------------------------------------------------------
-    # 1. Extract identity / role
+    # 1. Detect invocation source and extract identity / role
     # ------------------------------------------------------------------
-    user_id: str = event.get("user_id", "")
-    user_role: str = event.get("user_role", "")
+    from_bedrock = is_bedrock_event(event)
+
+    if from_bedrock:
+        session_attrs = (
+            event.get("sessionAttributes") or
+            event.get("agent", {}).get("sessionAttributes") or
+            {}
+        )
+        user_id = session_attrs.get("user_id", "")
+        user_role = session_attrs.get("user_role", "employee")
+    else:
+        user_id = event.get("user_id", "")
+        user_role = event.get("user_role", "")
 
     logger.info(
-        "query_inventory invoked | user_id=%s user_role=%s",
+        "query_inventory invoked | source=%s user_id=%s user_role=%s",
+        "bedrock" if from_bedrock else "direct",
         user_id,
         user_role,
     )
@@ -78,7 +96,10 @@ def handler(event: dict, context: object) -> dict:
     # ------------------------------------------------------------------
     # 2. Parse and validate input
     # ------------------------------------------------------------------
-    raw_params = event.get("parameters", {})
+    if from_bedrock:
+        raw_params = extract_bedrock_params(event)
+    else:
+        raw_params = event.get("parameters", {})
 
     # Guard: Strands/Claude sometimes serialises parameters as a list with a
     # single dict element instead of a plain dict.  Normalise it here so
@@ -94,7 +115,7 @@ def handler(event: dict, context: object) -> dict:
         logger.warning("Invalid parameters: %s", exc)
         result = error_response("INVALID_PARAMS", str(exc))
         log_invocation(user_id, user_role, "query_inventory", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # ------------------------------------------------------------------
     # 3. Execute queries
@@ -131,7 +152,7 @@ def handler(event: dict, context: object) -> dict:
                         }
                     )
                     log_invocation(user_id, user_role, "query_inventory", raw_params, not_found)
-                    return not_found
+                    return bedrock_response(event, not_found) if from_bedrock else not_found
 
                 result = {"found": True, "product": product}
 
@@ -160,7 +181,7 @@ def handler(event: dict, context: object) -> dict:
             "No se pudo conectar a la base de datos o ejecutar la consulta.",
         )
         log_invocation(user_id, user_role, "query_inventory", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     logger.info(
         "query_inventory success | user_id=%s product_id=%s sku=%s",
@@ -170,4 +191,4 @@ def handler(event: dict, context: object) -> dict:
     )
     final_response = success_response(result)
     log_invocation(user_id, user_role, "query_inventory", raw_params, final_response)
-    return final_response
+    return bedrock_response(event, final_response) if from_bedrock else final_response

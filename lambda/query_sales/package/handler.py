@@ -31,7 +31,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from shared.audit import log_invocation
 from shared.db import get_db_connection
-from shared.response import error_response, success_response
+from shared.response import (
+    bedrock_response,
+    error_response,
+    extract_bedrock_params,
+    is_bedrock_event,
+    success_response,
+)
+import json
 
 from models import QuerySalesInput, parse_period
 from queries import get_sales_by_category, get_top_products, get_total_by_period
@@ -86,13 +93,30 @@ def handler(event: dict, context: object) -> dict:
         ``success_response`` or ``error_response``.
     """
     # ------------------------------------------------------------------
-    # 1. Extract identity / role
+    # 1. Detect invocation source and extract identity / role
     # ------------------------------------------------------------------
-    user_id: str = event.get("user_id", "")
-    user_role: str = event.get("user_role", "")
+    from_bedrock = is_bedrock_event(event)
+
+    # Log the full event structure to diagnose Bedrock payload shape
+    logger.info("query_sales RAW EVENT: %s", json.dumps(event, default=str))
+    logger.info("query_sales from_bedrock=%s", from_bedrock)
+
+    if from_bedrock:
+        # Bedrock Agent passes session attributes for user context
+        session_attrs = (
+            event.get("sessionAttributes") or
+            event.get("agent", {}).get("sessionAttributes") or
+            {}
+        )
+        user_id = session_attrs.get("user_id", "")
+        user_role = session_attrs.get("user_role", "employee")
+    else:
+        user_id = event.get("user_id", "")
+        user_role = event.get("user_role", "")
 
     logger.info(
-        "query_sales invoked | user_id=%s user_role=%s",
+        "query_sales invoked | source=%s user_id=%s user_role=%s",
+        "bedrock" if from_bedrock else "direct",
         user_id,
         user_role,
     )
@@ -100,7 +124,10 @@ def handler(event: dict, context: object) -> dict:
     # ------------------------------------------------------------------
     # 2. Parse and validate input
     # ------------------------------------------------------------------
-    raw_params = event.get("parameters", {})
+    if from_bedrock:
+        raw_params = extract_bedrock_params(event)
+    else:
+        raw_params = event.get("parameters", {})
 
     # Guard: Strands/Claude sometimes serialises parameters as a list with a
     # single dict element instead of a plain dict.  Normalise it here so
@@ -116,7 +143,7 @@ def handler(event: dict, context: object) -> dict:
         logger.warning("Invalid parameters: %s", exc)
         result = error_response("INVALID_PARAMS", str(exc))
         log_invocation(user_id, user_role, "query_sales", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # ------------------------------------------------------------------
     # 3. Role-based access control for financial data
@@ -137,7 +164,7 @@ def handler(event: dict, context: object) -> dict:
             "No tienes permisos para acceder a datos financieros.",
         )
         log_invocation(user_id, user_role, "query_sales", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     if params.include_financial and user_role not in ("owner", "manager"):
         logger.warning(
@@ -149,7 +176,7 @@ def handler(event: dict, context: object) -> dict:
             "No tienes permisos para acceder a datos financieros.",
         )
         log_invocation(user_id, user_role, "query_sales", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # ------------------------------------------------------------------
     # 4. Execute queries
@@ -210,7 +237,7 @@ def handler(event: dict, context: object) -> dict:
             "No se pudo conectar a la base de datos o ejecutar la consulta.",
         )
         log_invocation(user_id, user_role, "query_sales", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     logger.info(
         "query_sales success | user_id=%s period=%s",
@@ -223,4 +250,4 @@ def handler(event: dict, context: object) -> dict:
 
     final_response = success_response(result)
     log_invocation(user_id, user_role, "query_sales", raw_params, final_response)
-    return final_response
+    return bedrock_response(event, final_response) if from_bedrock else final_response

@@ -35,7 +35,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from shared.audit import log_invocation                       # noqa: E402
 from shared.db import get_db_connection                       # noqa: E402
-from shared.response import error_response, success_response  # noqa: E402
+from shared.response import (                                 # noqa: E402
+    bedrock_response,
+    error_response,
+    extract_bedrock_params,
+    is_bedrock_event,
+    success_response,
+)
 
 from models import AnalyzeDiscountsInput, parse_analysis_period
 from queries import get_active_discounts, get_inventory_rotation_analysis
@@ -74,13 +80,25 @@ def handler(event: dict, context: object) -> dict:
             }
     """
     # ------------------------------------------------------------------
-    # 1. Extract identity / role
+    # 1. Detect invocation source and extract identity / role
     # ------------------------------------------------------------------
-    user_id: str = event.get("user_id", "")
-    user_role: str = event.get("user_role", "")
+    from_bedrock = is_bedrock_event(event)
+
+    if from_bedrock:
+        session_attrs = (
+            event.get("sessionAttributes") or
+            event.get("agent", {}).get("sessionAttributes") or
+            {}
+        )
+        user_id = session_attrs.get("user_id", "")
+        user_role = session_attrs.get("user_role", "employee")
+    else:
+        user_id = event.get("user_id", "")
+        user_role = event.get("user_role", "")
 
     logger.info(
-        "analyze_discounts invoked | user_id=%s user_role=%s",
+        "analyze_discounts invoked | source=%s user_id=%s user_role=%s",
+        "bedrock" if from_bedrock else "direct",
         user_id,
         user_role,
     )
@@ -100,12 +118,15 @@ def handler(event: dict, context: object) -> dict:
             "No tienes permisos para acceder a esta funcionalidad.",
         )
         log_invocation(user_id, user_role, "analyze_discounts", event.get("parameters", {}), result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # ------------------------------------------------------------------
     # 3. Parse and validate input
     # ------------------------------------------------------------------
-    raw_params = event.get("parameters", {})
+    if from_bedrock:
+        raw_params = extract_bedrock_params(event)
+    else:
+        raw_params = event.get("parameters", {})
 
     # Guard: Strands/Claude sometimes serialises parameters as a list with a
     # single dict element instead of a plain dict.  Normalise it here so
@@ -121,7 +142,7 @@ def handler(event: dict, context: object) -> dict:
         logger.warning("Invalid parameters: %s", exc)
         result = error_response("VALIDATION_ERROR", str(exc))
         log_invocation(user_id, user_role, "analyze_discounts", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # Resolve the numeric period (days) from the validated model
     analysis_period_days: int = parse_analysis_period(
@@ -155,7 +176,7 @@ def handler(event: dict, context: object) -> dict:
             "No se pudo conectar a la base de datos o ejecutar la consulta.",
         )
         log_invocation(user_id, user_role, "analyze_discounts", raw_params, result)
-        return result
+        return bedrock_response(event, result) if from_bedrock else result
 
     # ------------------------------------------------------------------
     # 5. Generate recommendations and summary (pure Python, no DB)
@@ -180,4 +201,4 @@ def handler(event: dict, context: object) -> dict:
 
     final_response = success_response(result)
     log_invocation(user_id, user_role, "analyze_discounts", raw_params, final_response)
-    return final_response
+    return bedrock_response(event, final_response) if from_bedrock else final_response

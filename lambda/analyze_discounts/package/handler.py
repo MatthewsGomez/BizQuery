@@ -105,7 +105,15 @@ def handler(event: dict, context: object) -> dict:
     # ------------------------------------------------------------------
     # 3. Parse and validate input
     # ------------------------------------------------------------------
-    raw_params: dict = event.get("parameters", {})
+    raw_params = event.get("parameters", {})
+
+    # Guard: Strands/Claude sometimes serialises parameters as a list with a
+    # single dict element instead of a plain dict.  Normalise it here so
+    # from_dict always receives a dict.
+    if isinstance(raw_params, list):
+        raw_params = raw_params[0] if raw_params else {}
+    if not isinstance(raw_params, dict):
+        raw_params = {}
 
     try:
         params = AnalyzeDiscountsInput.from_dict(raw_params)
